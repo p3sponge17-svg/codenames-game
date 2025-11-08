@@ -1,0 +1,16 @@
+{
+  "name": "codenames-multiplayer",
+  "version": "1.0.0",
+  "description": "Multiplayer Codenames game with Node.js and Socket.io",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["codenames", "multiplayer", "game"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
+}

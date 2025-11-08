@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codenames - Multiplayer</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+            padding: 10px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin: 5px 0 10px 0;
+            font-size: 2em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* Login Screen */
+        #loginScreen {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            max-width: 400px;
+            margin: 100px auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        #loginScreen h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        #loginScreen input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        #loginScreen button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        #loginScreen button:hover {
+            background: #5568d3;
+        }
+
+        /* Game Screen */
+        #gameScreen {
+            display: none;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .game-layout {
+            display: grid;
+            grid-template-columns: 250px 1fr 250px;
+            gap: 10px;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* Sidebar Panels */
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            overflow-y: auto;
+            max-height: 100%;
+        }
+
+        .panel h3 {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        /* Teams */
+        .team-section {
+            margin-bottom: 12px;
+        }
+
+        .team-header {
+            padding: 8px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-weight: bold;
+            font-size: 0.9em;
+            color: white;
+        }
+
+        .team-header.red {
+            background: #e74c3c;
+        }
+
+        .team-header.blue {
+            background: #3498db;
+        }
+
+        .player-list {
+            margin-left: 8px;
+        }
+
+        .player-item {
+            padding: 6px;
+            margin: 4px 0;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 3px solid #ddd;
+            font-size: 0.85em;
+        }
+
+        .player-item.spymaster {
+            border-left-color: gold;
+            background: #fff9e6;
+        }
+
+        .team-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .team-buttons button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: bold;
+            color: white;
+            transition: transform 0.2s;
+        }
+
+        .team-buttons button:hover {
+            transform: translateY(-2px);
+        }
+
+        .team-buttons button.red {
+            background: #e74c3c;
+        }
+
+        .team-buttons button.blue {
+            background: #3498db;
+        }
+
+        .spymaster-button {
+            width: 100%;
+            padding: 8px;
+            background: gold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.85em;
+            margin-bottom: 10px;
+        }
+
+        .spymaster-button:hover {
+            background: #f0c808;
+        }
+
+        .spymaster-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .start-button {
+            width: 100%;
+            padding: 10px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .start-button:hover {
+            background: #229954;
+        }
+
+        .start-button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        /* Game Board */
+        .board-container {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            max-height: 100%;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .turn-indicator {
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .turn-indicator.red {
+            color: #e74c3c;
+        }
+
+        .turn-indicator.blue {
+            color: #3498db;
+        }
+
+        .score-display {
+            display: flex;
+            gap: 10px;
+        }
+
+        .score-item {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+            color: white;
+        }
+
+        .score-item.red {
+            background: #e74c3c;
+        }
+
+        .score-item.blue {
+            background: #3498db;
+        }
+
+        .clue-display {
+            text-align: center;
+            padding: 10px;
+            background: #fff3cd;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .word-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+        }
+
+        .word-card {
+            aspect-ratio: 1.2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f0f0;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.75em;
+            text-align: center;
+            padding: 5px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            word-wrap: break-word;
+            min-height: 50px;
+        }
+
+        .word-card:hover:not(.revealed) {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .word-card.revealed {
+            cursor: not-allowed;
+        }
+
+        .word-card.revealed.red {
+            background: #e74c3c;
+            color: white;
+            border-color: #c0392b;
+        }
+
+        .word-card.revealed.blue {
+            background: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+
+        .word-card.revealed.neutral {
+            background: #95a5a6;
+            color: white;
+            border-color: #7f8c8d;
+        }
+
+        .word-card.revealed.assassin {
+            background: #2c3e50;
+            color: white;
+            border-color: #1a252f;
+        }
+
+        .word-card.spymaster-view.red {
+            background: #ffcdd2;
+            border-color: #e74c3c;
+        }
+
+        .word-card.spymaster-view.blue {
+            background: #bbdefb;
+            border-color: #3498db;
+        }
+
+        .word-card.spymaster-view.neutral {
+            background: #e0e0e0;
+            border-color: #95a5a6;
+        }
+
+        .word-card.spymaster-view.assassin {
+            background: #b0bec5;
+            border-color: #2c3e50;
+        }
+
+        /* Clue Input */
+        .clue-input {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .clue-input input {
+            flex: 2;
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .clue-input select {
+            flex: 1;
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .clue-input button {
+            padding: 8px 20px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        .clue-input button:hover {
+            background: #229954;
+        }
+
+        .clue-input button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .end-turn-button {
+            width: 100%;
+            padding: 8px;
+            background: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+
+        .end-turn-button:hover {
+            background: #d35400;
+        }
+
+        .end-turn-button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .new-game-button {
+            width: 100%;
+            padding: 8px;
+            background: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        .new-game-button:hover {
+            background: #8e44ad;
+        }
+
+        /* Game Over */
+        .game-over {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .game-over.show {
+            display: flex;
+        }
+
+        .game-over-content {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .game-over-content h2 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+
+        .game-over-content h2.red {
+            color: #e74c3c;
+        }
+
+        .game-over-content h2.blue {
+            color: #3498db;
+        }
+
+        .game-over-content button {
+            padding: 15px 30px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .game-over-content button:hover {
+            background: #229954;
+        }
+
+        @media (max-width: 1200px) {
+            .game-layout {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            .word-card {
+                font-size: 0.7em;
+            }
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.3em;
+            }
+
+            .word-grid {
+                gap: 5px;
+            }
+
+            .word-card {
+                font-size: 0.6em;
+                padding: 3px;
+                min-height: 40px;
+            }
+
+            .game-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (min-height: 900px) {
+            .word-card {
+                font-size: 0.85em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕵️ CODENAMES 🕵️</h1>
+
+        <!-- Login Screen -->
+        <div id="loginScreen">
+            <h2>Enter Your Name</h2>
+            <input type="text" id="playerName" placeholder="Your name..." maxlength="20">
+            <button onclick="joinGame()">Join Game</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="gameScreen">
+            <div class="game-layout">
+                <!-- Left Panel - Teams -->
+                <div class="panel">
+                    <h3>Teams</h3>
+                    <div class="team-buttons">
+                        <button class="red" onclick="joinTeam('red')">Join Red</button>
+                        <button class="blue" onclick="joinTeam('blue')">Join Blue</button>
+                    </div>
+                    
+                    <button class="spymaster-button" id="spymasterButton" onclick="becomeSpymaster()">
+                        Become Spymaster
+                    </button>
+
+                    <div class="team-section">
+                        <div class="team-header red">Red Team</div>
+                        <div id="redTeamList" class="player-list"></div>
+                    </div>
+
+                    <div class="team-section">
+                        <div class="team-header blue">Blue Team</div>
+                        <div id="blueTeamList" class="player-list"></div>
+                    </div>
+
+                    <button class="start-button" id="startButton" onclick="startGame()">
+                        Start Game
+                    </button>
+                </div>
+
+                <!-- Center - Game Board -->
+                <div class="board-container">
+                    <div id="gameNotStarted" style="text-align: center; padding: 30px; color: #999;">
+                        <h2 style="font-size: 1.5em;">Waiting for game to start...</h2>
+                        <p>Select your team and click "Start Game" when ready!</p>
+                    </div>
+
+                    <div id="gameBoard" style="display: none;">
+                        <div class="game-info">
+                            <div class="turn-indicator" id="turnIndicator"></div>
+                            <div class="score-display">
+                                <div class="score-item red" id="redScore">Red: 0/9</div>
+                                <div class="score-item blue" id="blueScore">Blue: 0/8</div>
+                            </div>
+                        </div>
+
+                        <div id="clueDisplay" class="clue-display" style="display: none;"></div>
+
+                        <div id="clueInput" class="clue-input" style="display: none;">
+                            <input type="text" id="clueWord" placeholder="Enter clue word..." maxlength="30">
+                            <select id="clueNumber">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                            </select>
+                            <button onclick="giveClue()">Give Clue</button>
+                        </div>
+
+                        <div class="word-grid" id="wordGrid"></div>
+
+                        <button class="end-turn-button" id="endTurnButton" onclick="endTurn()" style="display: none;">
+                            End Turn
+                        </button>
+                        
+                        <button class="new-game-button" onclick="newGame()">
+                            New Game
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Panel - Instructions -->
+                <div class="panel">
+                    <h3>How to Play</h3>
+                    <div style="font-size: 0.8em; line-height: 1.5;">
+                        <p><strong>Setup:</strong></p>
+                        <ul style="margin-left: 15px; margin-bottom: 10px;">
+                            <li>Join Red or Blue team</li>
+                            <li>One player per team becomes the Spymaster</li>
+                            <li>Click "Start Game" to begin</li>
+                        </ul>
+
+                        <p><strong>Gameplay:</strong></p>
+                        <ul style="margin-left: 15px; margin-bottom: 10px;">
+                            <li><strong>Spymaster:</strong> Give one-word clues + a number</li>
+                            <li><strong>Operatives:</strong> Guess which words match the clue</li>
+                            <li>Red team has 9 words, Blue has 8</li>
+                            <li>Avoid neutral words and the assassin!</li>
+                        </ul>
+
+                        <p><strong>Winning:</strong></p>
+                        <ul style="margin-left: 15px;">
+                            <li>Find all your team's words to win</li>
+                            <li>Picking the assassin = instant loss!</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div class="game-over" id="gameOverModal">
+            <div class="game-over-content">
+                <h2 id="winnerText"></h2>
+                <p id="winnerMessage"></p>
+                <button onclick="closeGameOver()">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let myPlayer = null;
+        let currentGameState = null;
+
+        // Join game
+        function joinGame() {
+            const name = document.getElementById('playerName').value.trim();
+            if (name) {
+                myPlayer = { name };
+                socket.emit('join', name);
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('gameScreen').style.display = 'block';
+            }
+        }
+
+        // Join team
+        function joinTeam(team) {
+            socket.emit('joinTeam', team);
+        }
+
+        // Become spymaster
+        function becomeSpymaster() {
+            socket.emit('becomeSpymaster');
+        }
+
+        // Start game
+        function startGame() {
+            socket.emit('startGame');
+        }
+
+        // Give clue
+        function giveClue() {
+            const word = document.getElementById('clueWord').value.trim().toUpperCase();
+            const number = document.getElementById('clueNumber').value;
+            
+            if (word) {
+                socket.emit('giveClue', { word, number });
+                document.getElementById('clueWord').value = '';
+            }
+        }
+
+        // Make guess
+        function makeGuess(index) {
+            socket.emit('guess', index);
+        }
+
+        // End turn
+        function endTurn() {
+            socket.emit('endTurn');
+        }
+
+        // New game
+        function newGame() {
+            socket.emit('newGame');
+        }
+
+        // Close game over modal
+        function closeGameOver() {
+            document.getElementById('gameOverModal').classList.remove('show');
+        }
+
+        // Update player list
+        socket.on('playerUpdate', (players) => {
+            const redList = document.getElementById('redTeamList');
+            const blueList = document.getElementById('blueTeamList');
+            
+            redList.innerHTML = '';
+            blueList.innerHTML = '';
+            
+            players.forEach(player => {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'player-item' + (player.spymaster ? ' spymaster' : '');
+                playerDiv.textContent = player.name + (player.spymaster ? ' 👑' : '');
+                
+                if (player.team === 'red') {
+                    redList.appendChild(playerDiv);
+                } else if (player.team === 'blue') {
+                    blueList.appendChild(playerDiv);
+                }
+
+                if (player.id === socket.id) {
+                    myPlayer = player;
+                }
+            });
+
+            // Update spymaster button
+            const spymasterBtn = document.getElementById('spymasterButton');
+            if (myPlayer && myPlayer.spymaster) {
+                spymasterBtn.textContent = 'You are Spymaster';
+                spymasterBtn.disabled = true;
+            } else if (myPlayer && myPlayer.team) {
+                const hasSpymaster = players.some(p => 
+                    p.team === myPlayer.team && p.spymaster
+                );
+                spymasterBtn.disabled = hasSpymaster;
+                spymasterBtn.textContent = hasSpymaster ? 
+                    'Spymaster Selected' : 'Become Spymaster';
+            } else {
+                spymasterBtn.disabled = true;
+                spymasterBtn.textContent = 'Join a team first';
+            }
+        });
+
+        // Update game state
+        socket.on('gameState', (state) => {
+            currentGameState = state;
+            
+            if (state.gameStarted) {
+                document.getElementById('gameNotStarted').style.display = 'none';
+                document.getElementById('gameBoard').style.display = 'block';
+                
+                // Update turn indicator
+                const turnIndicator = document.getElementById('turnIndicator');
+                turnIndicator.textContent = `${state.currentTeam.toUpperCase()} TEAM'S TURN`;
+                turnIndicator.className = `turn-indicator ${state.currentTeam}`;
+                
+                // Update scores
+                document.getElementById('redScore').textContent = `Red: ${state.redScore}/${state.redTotal}`;
+                document.getElementById('blueScore').textContent = `Blue: ${state.blueScore}/${state.blueTotal}`;
+                
+                // Update clue display
+                const clueDisplay = document.getElementById('clueDisplay');
+                if (state.currentClue) {
+                    clueDisplay.style.display = 'block';
+                    clueDisplay.textContent = `Clue: ${state.currentClue.word} - ${state.currentClue.number} word(s) (${state.guessesRemaining} guesses remaining)`;
+                } else {
+                    clueDisplay.style.display = 'none';
+                }
+                
+                // Update clue input
+                const clueInput = document.getElementById('clueInput');
+                if (myPlayer && myPlayer.spymaster && 
+                    myPlayer.team === state.currentTeam && 
+                    state.guessesRemaining === 0) {
+                    clueInput.style.display = 'flex';
+                } else {
+                    clueInput.style.display = 'none';
+                }
+                
+                // Update end turn button
+                const endTurnButton = document.getElementById('endTurnButton');
+                if (myPlayer && myPlayer.team === state.currentTeam && 
+                    state.guessesRemaining > 0) {
+                    endTurnButton.style.display = 'block';
+                } else {
+                    endTurnButton.style.display = 'none';
+                }
+                
+                // Update word grid
+                const wordGrid = document.getElementById('wordGrid');
+                wordGrid.innerHTML = '';
+                
+                state.words.forEach((word, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'word-card';
+                    card.textContent = word.word;
+                    
+                    if (word.revealed) {
+                        card.classList.add('revealed', word.type);
+                    } else if (myPlayer && myPlayer.spymaster && word.type !== 'hidden') {
+                        card.classList.add('spymaster-view', word.type);
+                    }
+                    
+                    // Allow guessing
+                    if (!word.revealed && myPlayer && 
+                        !myPlayer.spymaster && 
+                        myPlayer.team === state.currentTeam && 
+                        state.guessesRemaining > 0) {
+                        card.style.cursor = 'pointer';
+                        card.onclick = () => makeGuess(index);
+                    }
+                    
+                    wordGrid.appendChild(card);
+                });
+                
+                // Check for game over
+                if (state.gameOver) {
+                    const modal = document.getElementById('gameOverModal');
+                    const winnerText = document.getElementById('winnerText');
+                    const winnerMessage = document.getElementById('winnerMessage');
+                    
+                    const winningTeam = state.winner.toUpperCase();
+                    const losingTeam = state.winner === 'red' ? 'BLUE' : 'RED';
+                    
+                    if (state.winReason === 'assassin') {
+                        winnerText.textContent = `${winningTeam} TEAM WAS VICTORIOUS!`;
+                        winnerMessage.textContent = `${losingTeam} Team was killed by the Assassin! 💀`;
+                    } else if (state.winReason === 'foundAll') {
+                        winnerText.textContent = `${winningTeam} TEAM WAS VICTORIOUS!`;
+                        winnerMessage.textContent = `Congratulations ${winningTeam} Team on finding all your words! 🎉`;
+                    }
+                    
+                    winnerText.className = state.winner;
+                    modal.classList.add('show');
+                }
+            } else {
+                document.getElementById('gameNotStarted').style.display = 'block';
+                document.getElementById('gameBoard').style.display = 'none';
+            }
+        });
+
+        // Handle Enter key in clue input
+        document.getElementById('clueWord').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                giveClue();
+            }
+        });
+
+        // Handle Enter key in name input
+        document.getElementById('playerName').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                joinGame();
+            }
+        });
+    </script>
+</body>
+</html>
