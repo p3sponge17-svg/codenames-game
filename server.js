@@ -144,19 +144,37 @@ function getPublicGameState(socketId) {
   };
 }
 
+// Automatically assign a new player to the smaller team (even distribution)
+function autoAssignTeamForNewPlayer(socketId) {
+  const redCount = gameState.redTeam.length;
+  const blueCount = gameState.blueTeam.length;
+  return redCount <= blueCount ? 'red' : 'blue';
+}
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   // Add player
   socket.on('join', (playerName) => {
+    // Auto-assign team to keep teams even as players join
+    const assignedTeam = autoAssignTeamForNewPlayer(socket.id);
+
     gameState.players[socket.id] = {
       id: socket.id,
       name: playerName,
-      team: null,
-      spymaster: false
+      team: assignedTeam,
+      spymaster: false,
+      readyNewGame: false
     };
-    
+
+    if (assignedTeam === 'red') {
+      gameState.redTeam.push(socket.id);
+    } else if (assignedTeam === 'blue') {
+      gameState.blueTeam.push(socket.id);
+    }
+
+    // Notify all clients about the updated player list and the joining player of the game state
     io.emit('playerUpdate', Object.values(gameState.players));
     socket.emit('gameState', getPublicGameState(socket.id));
   });
@@ -165,6 +183,9 @@ io.on('connection', (socket) => {
   socket.on('joinTeam', (team) => {
     const player = gameState.players[socket.id];
     if (!player) return;
+
+    // Reset readyNewGame when changing teams
+    player.readyNewGame = false;
 
     // Remove from old team
     if (player.team === 'red') {
@@ -211,9 +232,48 @@ io.on('connection', (socket) => {
     io.to(socket.id).emit('gameState', getPublicGameState(socket.id));
   });
 
-  // Start game
+  // Player indicates they are ready to start a new game
+  socket.on('playerReadyNewGame', () => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+
+    player.readyNewGame = true;
+
+    // Broadcast updated player list and state so clients can show who's ready
+    io.emit('playerUpdate', Object.values(gameState.players));
+    Object.keys(gameState.players).forEach(playerId => {
+      io.to(playerId).emit('gameState', getPublicGameState(playerId));
+    });
+
+    // Check if everyone is ready
+    const allPlayers = Object.values(gameState.players);
+    if (allPlayers.length > 0 && allPlayers.every(p => p.readyNewGame)) {
+      // Reset ready flags and spymasters, then initialize a new game
+      allPlayers.forEach(p => {
+        p.readyNewGame = false;
+        p.spymaster = false;
+      });
+      gameState.redSpymaster = null;
+      gameState.blueSpymaster = null;
+
+      initializeGame();
+
+      io.emit('playerUpdate', Object.values(gameState.players));
+      Object.keys(gameState.players).forEach(playerId => {
+        io.to(playerId).emit('gameState', getPublicGameState(playerId));
+      });
+    }
+  });
+
+  // Start game (manual start)
   socket.on('startGame', () => {
     if (gameState.redTeam.length > 0 && gameState.blueTeam.length > 0) {
+      // Clear ready flags when a manual start is triggered
+      Object.values(gameState.players).forEach(p => {
+        p.readyNewGame = false;
+        p.spymaster = p.spymaster || false;
+      });
+
       initializeGame();
       
       // Send personalized game state to each player
@@ -298,11 +358,12 @@ io.on('connection', (socket) => {
     });
   });
 
-  // New game
+  // New game (legacy/admin immediate start)
   socket.on('newGame', () => {
-    // Reset spymasters
+    // Reset spymasters and ready flags
     Object.values(gameState.players).forEach(player => {
       player.spymaster = false;
+      player.readyNewGame = false;
     });
     gameState.redSpymaster = null;
     gameState.blueSpymaster = null;
